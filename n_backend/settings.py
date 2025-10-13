@@ -12,6 +12,7 @@ AUTHOR = 'NamanJha'
 ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -59,30 +60,42 @@ DATABASES = {
     }
 }
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'djongo',
-#         'NAME': 'news',
-#         'ENFORCE_SCHEMA': False,
-#         'CLIENT': {
-#             'host': '0.0.0.0',
-#             'port': 27017,
-#             'username': 'hello',
-#             'password': 'hello',
-#             'authSource': 'news',
-#             'authMechanism': 'SCRAM-SHA-1'
-#         },
-#         'LOGGING': {
-#             'version': 1,
-#             'loggers': {
-#                 'djongo': {
-#                     'level': 'DEBUG',
-#                     'propagate': False,                        
-#                 }
-#             },
-#             },
-#     }
-# }
+JAZZMIN_SETTINGS = {
+    "site_title": "News Admin",
+
+    # Title on the login screen (19 chars max) (defaults to current_admin_site.site_header if absent or None)
+    "site_header": "News",
+
+    # Title on the brand (19 chars max) (defaults to current_admin_site.site_header if absent or None)
+    "site_brand": "News",
+
+    # "site_logo": "books/img/logo.png",
+
+    "login_logo_dark": None,
+
+    "site_logo_classes": "img-circle",
+
+    "site_icon": None,
+
+    "welcome_sign": "Welcome to the News",
+
+    "copyright": "Made By Naman Jha",
+
+    "search_model": ["auth.User"],
+
+    "user_avatar": None,
+
+    "topmenu_links": [
+
+        {"name": "Home",  "url": "admin:index", "permissions": ["auth.view_user"]},
+
+        {"name": "Support", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
+
+        {"app": "users"},
+
+        {"app": "articles"},
+    ],
+}
 
 
 AUTH_PASSWORD_VALIDATORS = [
