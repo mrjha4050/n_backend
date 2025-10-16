@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  web:
+    build:
+      context: /Users/naman/Desktop/n_backend
+      dockerfile: DockerFile
+    ports:
+      - "8000:8000"
+    environment:
+      # Set any Django env vars here
+      - DJANGO_SETTINGS_MODULE=n_backend.settings
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    # Uncomment to live-reload code changes during development
+    # volumes:
+    #   - .:/app
+
