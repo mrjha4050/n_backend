@@ -16,8 +16,8 @@ class Users(BaseModel):
     username = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
-    role = models.CharField(max_length=255, choices=[('reader', 'Reader'), ('journalist', 'Journalist')])
-    profileUrl = models.CharField(max_length=255)
+    role = models.CharField(max_length=255, choices=[('reader', 'Reader'), ('journalist', 'Journalist'), ('user', 'User')])
+    # profileUrl = models.CharField(max_length=255, blank=True, default='')
 
     class Meta:
         db_table = 'users'

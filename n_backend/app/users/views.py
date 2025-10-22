@@ -54,8 +54,7 @@ def register(request):
             username=data['username'],
             email=data['email'],
             password=data['password'],  # Will be hashed in save()
-            role=data['role'],
-            profileUrl=data.get('profileUrl', '')
+            role=data['role']
         )
         
         user.full_clean() 
@@ -72,7 +71,7 @@ def register(request):
                     'username': user.username,
                     'email': user.email,
                     'role': user.role,
-                    'profileUrl': user.profileUrl,
+                    # 'profileUrl': user.profileUrl,
                     'created_at': user.created_at.isoformat()
                 },
                 'token': token
@@ -144,7 +143,7 @@ def login(request):
                     'username': user.username,
                     'email': user.email,
                     'role': user.role,
-                    'profileUrl': user.profileUrl,
+                    # 'profileUrl': user.profileUrl,
                     'created_at': user.created_at.isoformat()
                 },
                 'token': token
@@ -192,7 +191,7 @@ def get_profile(request):
                     'username': user.username,
                     'email': user.email,
                     'role': user.role,
-                    'profileUrl': user.profileUrl,
+                    # 'profileUrl': user.profileUrl,
                     'created_at': user.created_at.isoformat(),
                     'updated_at': user.updated_at.isoformat()
                 }
@@ -234,11 +233,10 @@ def update_profile(request):
         user = Users.objects.get(id=payload['user_id'])
         data = json.loads(request.body)
         
-        # Update allowed fields
         if 'username' in data:
             user.username = data['username']
-        if 'profileUrl' in data:
-            user.profileUrl = data['profileUrl']
+        # if 'profileUrl' in data:
+        #     user.profileUrl = data['profileUrl']
         if 'role' in data:
             user.role = data['role']
         
@@ -254,7 +252,7 @@ def update_profile(request):
                     'username': user.username,
                     'email': user.email,
                     'role': user.role,
-                    'profileUrl': user.profileUrl,
+                    # 'profileUrl': user.profileUrl,
                     'created_at': user.created_at.isoformat(),
                     'updated_at': user.updated_at.isoformat()
                 }
@@ -422,7 +420,7 @@ def list_users(request):
                 'username': user.username,
                 'email': user.email,
                 'role': user.role,
-                'profileUrl': user.profileUrl,
+                # 'profileUrl': user.profileUrl,
                 'created_at': user.created_at.isoformat(),
                 'updated_at': user.updated_at.isoformat()
             })
