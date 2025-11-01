@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from .models import Users
 import base64
+from ..cloudinary import upload_image
 
 def generate_simple_token(user):
     """Generate simple token for user"""
@@ -57,6 +58,11 @@ def register(request):
             role=data['role']
         )
         
+        if 'profileUrl' in data:
+            user.profileUrl = data['profileUrl']
+        if 'pdfUrl' in data:
+            user.pdfUrl = data['pdfUrl']
+        
         user.full_clean() 
         user.save()
         
@@ -71,7 +77,8 @@ def register(request):
                     'username': user.username,
                     'email': user.email,
                     'role': user.role,
-                    # 'profileUrl': user.profileUrl,
+                    'profileUrl': user.profileUrl or '',
+                    'pdfUrl': user.pdfUrl or '',
                     'created_at': user.created_at.isoformat()
                 },
                 'token': token
@@ -143,7 +150,8 @@ def login(request):
                     'username': user.username,
                     'email': user.email,
                     'role': user.role,
-                    # 'profileUrl': user.profileUrl,
+                    'profileUrl': user.profileUrl or '',
+                    'pdfUrl': user.pdfUrl or '',
                     'created_at': user.created_at.isoformat()
                 },
                 'token': token
@@ -191,7 +199,8 @@ def get_profile(request):
                     'username': user.username,
                     'email': user.email,
                     'role': user.role,
-                    # 'profileUrl': user.profileUrl,
+                    'profileUrl': user.profileUrl or '',
+                    'pdfUrl': user.pdfUrl or '',
                     'created_at': user.created_at.isoformat(),
                     'updated_at': user.updated_at.isoformat()
                 }
@@ -235,8 +244,10 @@ def update_profile(request):
         
         if 'username' in data:
             user.username = data['username']
-        # if 'profileUrl' in data:
-        #     user.profileUrl = data['profileUrl']
+        if 'profileUrl' in data:
+            user.profileUrl = data['profileUrl']
+        if 'pdfUrl' in data:
+            user.pdfUrl = data['pdfUrl']
         if 'role' in data:
             user.role = data['role']
         
@@ -252,7 +263,8 @@ def update_profile(request):
                     'username': user.username,
                     'email': user.email,
                     'role': user.role,
-                    # 'profileUrl': user.profileUrl,
+                    'profileUrl': user.profileUrl or '',
+                    'pdfUrl': user.pdfUrl or '',
                     'created_at': user.created_at.isoformat(),
                     'updated_at': user.updated_at.isoformat()
                 }
@@ -420,7 +432,8 @@ def list_users(request):
                 'username': user.username,
                 'email': user.email,
                 'role': user.role,
-                # 'profileUrl': user.profileUrl,
+                'profileUrl': user.profileUrl or '',
+                'pdfUrl': user.pdfUrl or '',
                 'created_at': user.created_at.isoformat(),
                 'updated_at': user.updated_at.isoformat()
             })
@@ -437,4 +450,135 @@ def list_users(request):
         return JsonResponse({
             'success': False,
             'message': f'Failed to list users: {str(e)}'
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def upload_profile_image(request):
+    """Upload profile image to Cloudinary and update user profileUrl"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return JsonResponse({
+                'success': False,
+                'message': 'Authorization token required'
+            }, status=401)
+        
+        token = auth_header.split(' ')[1]
+        payload = verify_simple_token(token)
+        
+        if not payload:
+            return JsonResponse({
+                'success': False,
+                'message': 'Invalid or expired token'
+            }, status=401)
+        
+        user = Users.objects.get(id=payload['user_id'])
+        
+        if 'file' not in request.FILES:
+            return JsonResponse({
+                'success': False,
+                'message': 'No file provided'
+            }, status=400)
+        
+        file = request.FILES['file']
+        
+        # Upload to Cloudinary
+        upload_result = upload_image(
+            file,
+            folder=f'users/{user.id}/profile',
+            resource_type='image',
+            overwrite=True
+        )
+        
+        # Update user profileUrl
+        user.profileUrl = upload_result['secure_url']
+        user.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Profile image uploaded successfully',
+            'data': {
+                'profileUrl': user.profileUrl
+            }
+        })
+        
+    except Users.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'User not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Failed to upload profile image: {str(e)}'
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def upload_pdf(request):
+    """Upload PDF to Cloudinary and update user pdfUrl"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return JsonResponse({
+                'success': False,
+                'message': 'Authorization token required'
+            }, status=401)
+        
+        token = auth_header.split(' ')[1]
+        payload = verify_simple_token(token)
+        
+        if not payload:
+            return JsonResponse({
+                'success': False,
+                'message': 'Invalid or expired token'
+            }, status=401)
+        
+        user = Users.objects.get(id=payload['user_id'])
+        
+        if 'file' not in request.FILES:
+            return JsonResponse({
+                'success': False,
+                'message': 'No file provided'
+            }, status=400)
+        
+        file = request.FILES['file']
+        
+        # Check if file is PDF
+        if not file.name.lower().endswith('.pdf'):
+            return JsonResponse({
+                'success': False,
+                'message': 'File must be a PDF'
+            }, status=400)
+        
+        # Upload to Cloudinary
+        upload_result = upload_image(
+            file,
+            folder=f'users/{user.id}/pdfs',
+            resource_type='raw',
+            overwrite=True
+        )
+        
+        # Update user pdfUrl
+        user.pdfUrl = upload_result['secure_url']
+        user.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'PDF uploaded successfully',
+            'data': {
+                'pdfUrl': user.pdfUrl
+            }
+        })
+        
+    except Users.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'User not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Failed to upload PDF: {str(e)}'
         }, status=500)

@@ -17,7 +17,8 @@ class Users(BaseModel):
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
     role = models.CharField(max_length=255, choices=[('reader', 'Reader'), ('journalist', 'Journalist'), ('user', 'User')])
-    # profileUrl = models.CharField(max_length=255, blank=True, default='')
+    profileUrl = models.CharField(max_length=255, blank=True, default='', null=True)
+    pdfUrl = models.CharField(max_length=255, blank=True, default='', null=True)
 
     class Meta:
         db_table = 'users'
