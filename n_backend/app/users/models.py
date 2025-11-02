@@ -1,4 +1,4 @@
-from djongo import models
+from django.db import models
 import uuid
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ValidationError
@@ -19,6 +19,7 @@ class Users(BaseModel):
     role = models.CharField(max_length=255, choices=[('reader', 'Reader'), ('journalist', 'Journalist'), ('user', 'User')])
     profileUrl = models.CharField(max_length=255, blank=True, default='', null=True)
     pdfUrl = models.CharField(max_length=255, blank=True, default='', null=True)
+    pdfPublicId = models.CharField(max_length=255, blank=True, default='', null=True, help_text='Cloudinary public_id for PDF file')
 
     class Meta:
         db_table = 'users'

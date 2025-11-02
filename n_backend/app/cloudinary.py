@@ -12,10 +12,10 @@ _API_KEY = os.getenv("CLOUDINARY_API_KEY")
 _API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
 _SECURE = os.getenv("CLOUDINARY_SECURE", "1")
 
-if not (_CLOUD_NAME and _API_KEY and _API_SECRET):
-    raise RuntimeError(
-        "Cloudinary environment variables missing. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET."
-    )
+# if not (_CLOUD_NAME and _API_KEY and _API_SECRET):
+#     raise RuntimeError(
+#         "Cloudinary environment variables missing. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET."
+#     )
 
 cloudinary.config(
     cloud_name=_CLOUD_NAME,
