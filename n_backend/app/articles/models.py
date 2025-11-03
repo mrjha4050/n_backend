@@ -34,6 +34,21 @@ class Articles(BaseModel):
         """Returns the number of comments for this article"""
         return self.interactions.exclude(comment__isnull=True).exclude(comment='').count()
 
+    def extract_cloudinary_public_ids(self):
+        """Extract Cloudinary public IDs from media URLs for cleanup"""
+        public_ids = []
+        for media_url in self.media:
+            if 'cloudinary.com' in media_url:
+                # Extract public ID from Cloudinary URL
+                parts = media_url.split('/')
+                if 'image/upload' in parts:
+                    upload_index = parts.index('image/upload')
+                    if len(parts) > upload_index + 1:
+                        public_id_with_format = parts[upload_index + 1]
+                        public_id = public_id_with_format.split('.')[0]  # Remove file extension
+                        public_ids.append(public_id)
+        return public_ids
+
 
 class ArticleInteraction(BaseModel):
     article = models.ForeignKey(

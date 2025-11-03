@@ -14,10 +14,18 @@ from n_backend.app.users.models import Users
 from n_backend.app.users.views import verify_simple_token
 
 try:
-    from n_backend.app.cloudinary import upload_image
+    from n_backend.app.cloudinary import upload_image, upload_image_from_url, delete_image
 except Exception:
     def upload_image(file_obj, folder=None, resource_type='image', overwrite=False):
         raise Exception("upload_image not implemented or import path wrong")
+
+
+    def upload_image_from_url(image_url, folder=None, resource_type='image'):
+        raise Exception("upload_image_from_url not implemented")
+
+
+    def delete_image(public_id, resource_type='image'):
+        raise Exception("delete_image not implemented")
 
 
 def article_to_dict(article: Articles):
@@ -103,6 +111,8 @@ def article_comments_likes(request):
     except Exception as e:
         print("article_comments_likes exception:", str(e))
         return JsonResponse({"success": False, "message": f"Failed to get counts: {str(e)}"}, status=500)
+
+
 # Update the add_like function
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
@@ -163,7 +173,6 @@ def add_like(request):
     except Exception as e:
         print("add_like exception:", str(e))
         return JsonResponse({"success": False, "message": f"Failed to toggle like: {str(e)}"}, status=500)
-
 
 
 @csrf_exempt
@@ -235,6 +244,7 @@ def add_comment(request):
         print("add_comment exception:", str(e))
         return JsonResponse({"success": False, "message": f"Failed to add comment: {str(e)}"}, status=500)
 
+
 @require_http_methods(["GET"])
 def get_comments(request):
     """
@@ -282,6 +292,7 @@ def get_comments(request):
 
     except Exception as e:
         return JsonResponse({"success": False, "message": f"Failed to fetch comments: {str(e)}"}, status=500)
+
 
 # Update the toggle_save_article function
 @csrf_exempt
@@ -340,6 +351,7 @@ def toggle_save_article(request):
         print("toggle_save_article exception:", str(e))
         return JsonResponse({"success": False, "message": f"Failed to toggle save: {str(e)}"}, status=500)
 
+
 @require_http_methods(["GET"])
 def get_user_interaction(request):
     """
@@ -376,9 +388,7 @@ def get_user_interaction(request):
         return JsonResponse({"success": False, "message": f"Failed to fetch user interaction: {str(e)}"}, status=500)
 
 
-# Your existing functions (create_article, get_articles, update_article, delete_article, etc.)
-# remain mostly the same but now use the updated article_to_dict
-
+# Create article function with better Cloudinary handling
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
 def create_article(request):
@@ -386,11 +396,6 @@ def create_article(request):
     Accepts:
       - JSON: application/json body: { title, content (array or JSON-string), category, tags(optional), media(optional) }
       - multipart/form-data: 'title', 'content' (JSON string), files named file_0, file_1 ... for image blocks
-    Auth:
-      - If Authorization: Bearer <token> present and valid, the token-user will be used as author.
-      - Otherwise, the request may include 'author' id in payload (useful for tests).
-    Frontend convention:
-      - Image blocks referencing files use value 'file_<index>' and corresponding request.FILES contains that file.
     """
     if request.method == "OPTIONS":
         return JsonResponse({}, status=200)
@@ -474,6 +479,8 @@ def create_article(request):
             except Exception:
                 media_urls = []
 
+        uploaded_files = []  # Track uploaded files for cleanup in case of failure
+
         for idx, block in enumerate(content_list):
             if not isinstance(block, dict):
                 continue
@@ -488,22 +495,58 @@ def create_article(request):
                 if isinstance(val, str) and val.startswith("file_") and val in request.FILES:
                     file_obj = request.FILES.get(val)
                     try:
-                        upload_result = upload_image(file_obj, folder=f"articles/{author_user.id}",
-                                                     resource_type="image", overwrite=True)
-                        uploaded_url = upload_result.get("secure_url") or upload_result.get("url")
+                        # Upload to Cloudinary with user-specific folder
+                        folder_path = f"articles/{author_user.id}"
+                        upload_result = upload_image(
+                            file_obj,
+                            folder=folder_path,
+                            resource_type="image",
+                            overwrite=True
+                        )
+                        uploaded_url = upload_result.get("secure_url")
                         if uploaded_url:
                             media_urls.append(uploaded_url)
-                            processed_content.append({"type": "image", "value": uploaded_url, "caption": caption})
+                            processed_content.append({
+                                "type": "image",
+                                "value": uploaded_url,
+                                "caption": caption,
+                                "public_id": upload_result.get("public_id")  # Store public ID for future management
+                            })
+                            uploaded_files.append(upload_result.get("public_id"))
                         else:
                             processed_content.append({"type": "image", "value": "", "caption": caption})
                     except Exception as ue:
-                        print("upload_image error:", ue)
+                        print("Cloudinary upload error:", ue)
                         processed_content.append({"type": "image", "value": "", "caption": caption})
                 else:
                     # direct URL or empty
                     if isinstance(val, str) and val:
-                        media_urls.append(val)
-                    processed_content.append({"type": "image", "value": val or "", "caption": caption})
+                        # If it's a non-Cloudinary URL, you might want to upload it to Cloudinary
+                        if 'cloudinary.com' not in val and val.startswith(('http://', 'https://')):
+                            try:
+                                folder_path = f"articles/{author_user.id}"
+                                upload_result = upload_image_from_url(val, folder=folder_path)
+                                uploaded_url = upload_result.get("secure_url")
+                                if uploaded_url:
+                                    media_urls.append(uploaded_url)
+                                    processed_content.append({
+                                        "type": "image",
+                                        "value": uploaded_url,
+                                        "caption": caption,
+                                        "public_id": upload_result.get("public_id")
+                                    })
+                                    uploaded_files.append(upload_result.get("public_id"))
+                                else:
+                                    media_urls.append(val)
+                                    processed_content.append({"type": "image", "value": val, "caption": caption})
+                            except Exception:
+                                media_urls.append(val)
+                                processed_content.append({"type": "image", "value": val, "caption": caption})
+                        else:
+                            media_urls.append(val)
+                            processed_content.append({"type": "image", "value": val, "caption": caption})
+                    else:
+                        processed_content.append({"type": "image", "value": val or "", "caption": caption})
                 continue
             # unknown types are preserved
             processed_content.append(block)
@@ -526,12 +569,92 @@ def create_article(request):
             {"success": True, "message": "Article created", "data": {"article": article_to_dict(article)}}, status=201)
 
     except ValidationError as e:
+        # Clean up uploaded files if validation fails
+        for public_id in uploaded_files:
+            try:
+                delete_image(public_id)
+            except Exception:
+                pass
         return JsonResponse({"success": False, "message": str(e)}, status=400)
     except IntegrityError:
+        # Clean up uploaded files if integrity error occurs
+        for public_id in uploaded_files:
+            try:
+                delete_image(public_id)
+            except Exception:
+                pass
         return JsonResponse({"success": False, "message": "Integrity error while creating article"}, status=400)
     except Exception as e:
+        # Clean up uploaded files if any other error occurs
+        for public_id in uploaded_files:
+            try:
+                delete_image(public_id)
+            except Exception:
+                pass
         print("create_article exception:", str(e))
         return JsonResponse({"success": False, "message": f"Failed to create article: {str(e)}"}, status=500)
+
+
+# Add a new view for image management
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def upload_article_image(request):
+    """
+    Upload an image for an article directly to Cloudinary
+    Returns the Cloudinary URL for use in article content
+    """
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
+
+    try:
+        # Authenticate user
+        auth_header = request.headers.get("Authorization") or request.META.get("HTTP_AUTHORIZATION")
+        user = None
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+            payload = verify_simple_token(token)
+            if payload and payload.get("user_id"):
+                try:
+                    user = Users.objects.get(id=payload["user_id"])
+                except Users.DoesNotExist:
+                    return JsonResponse({"success": False, "message": "Token user not found"}, status=401)
+
+        if not user:
+            return JsonResponse({"success": False, "message": "Authentication required"}, status=401)
+
+        if 'image' not in request.FILES:
+            return JsonResponse({"success": False, "message": "No image file provided"}, status=400)
+
+        image_file = request.FILES['image']
+
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if image_file.content_type not in allowed_types:
+            return JsonResponse({"success": False, "message": "Invalid image format"}, status=400)
+
+        # Upload to Cloudinary
+        folder_path = f"articles/{user.id}"
+        upload_result = upload_image(
+            image_file,
+            folder=folder_path,
+            resource_type="image",
+            overwrite=True
+        )
+
+        return JsonResponse({
+            "success": True,
+            "data": {
+                "url": upload_result.get("secure_url"),
+                "public_id": upload_result.get("public_id"),
+                "width": upload_result.get("width"),
+                "height": upload_result.get("height"),
+                "format": upload_result.get("format")
+            }
+        }, status=200)
+
+    except Exception as e:
+        print("upload_article_image exception:", str(e))
+        return JsonResponse({"success": False, "message": f"Failed to upload image: {str(e)}"}, status=500)
 
 
 @require_http_methods(["GET"])

@@ -18,4 +18,7 @@ urlpatterns =[
     path('toggle-save-article/', views.toggle_save_article, name='toggle_save_article'),
     path('user-interaction/', views.get_user_interaction, name='user_interaction'),
     path('comments-likes/', views.article_comments_likes, name='article_comments_likes'),
+
+# Cloudinary image upload endpoint
+    path('upload-image/', views.upload_article_image, name='upload_article_image'),
 ]
