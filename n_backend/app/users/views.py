@@ -8,6 +8,8 @@ import json
 from datetime import datetime
 from .models import Users
 import base64
+
+from n_backend.app.articles.models import Articles
 from ..cloudinary import upload_image
 
 def generate_simple_token(user):
@@ -777,3 +779,248 @@ def upload_pdf(request):
             'message': f'An unexpected error occurred: {str(e)}',
             'error': 'Internal server error'
         }, status=500)
+
+
+# @csrf_exempt
+# @require_http_methods(["POST", "OPTIONS"])
+# def save_article(request):
+#     """
+#     Save an article for a user
+#     Expects JSON: {"article_id": "uuid"}
+#     Requires Bearer token in Authorization header
+#     """
+#     if request.method == "OPTIONS":
+#         return JsonResponse({}, status=200)
+#
+#     try:
+#         # Verify user token
+#         auth_header = request.headers.get("Authorization") or request.META.get("HTTP_AUTHORIZATION")
+#         if not auth_header or not auth_header.startswith("Bearer "):
+#             return JsonResponse({"success": False, "message": "Authorization token required"}, status=401)
+#
+#         token = auth_header.split(" ", 1)[1].strip()
+#         payload = verify_simple_token(token)
+#         if not payload or not payload.get("user_id"):
+#             return JsonResponse({"success": False, "message": "Invalid or expired token"}, status=401)
+#
+#         try:
+#             user = Users.objects.get(id=payload["user_id"])
+#         except Users.DoesNotExist:
+#             return JsonResponse({"success": False, "message": "User not found"}, status=404)
+#
+#         # Get article_id from request body
+#         try:
+#             data = json.loads(request.body)
+#         except json.JSONDecodeError:
+#             return JsonResponse({"success": False, "message": "Invalid JSON body"}, status=400)
+#
+#         article_id = data.get('article_id')
+#         if not article_id:
+#             return JsonResponse({"success": False, "message": "article_id required"}, status=400)
+#
+#         try:
+#             article = Articles.objects.get(id=article_id)
+#         except Articles.DoesNotExist:
+#             return JsonResponse({"success": False, "message": "Article not found"}, status=404)
+#
+#         # Check if already saved
+#         existing_save = User_Saves.objects.filter(user=user, article=article).first()
+#         if existing_save:
+#             return JsonResponse({"success": False, "message": "Article already saved"}, status=400)
+#
+#         # Create new save
+#         user_save = User_Saves.objects.create(user=user, article=article)
+#
+#         return JsonResponse({
+#             "success": True,
+#             "message": "Article saved successfully",
+#             "data": {
+#                 "save_id": str(user_save.id),
+#                 "article_id": str(article.id),
+#                 "article_title": article.title,
+#                 "saved_at": user_save.created_at.isoformat() if user_save.created_at else None
+#             }
+#         }, status=201)
+#
+#     except IntegrityError:
+#         return JsonResponse({"success": False, "message": "Article already saved"}, status=400)
+#     except Exception as e:
+#         print("save_article exception:", str(e))
+#         return JsonResponse({"success": False, "message": f"Failed to save article: {str(e)}"}, status=500)
+
+
+# @csrf_exempt
+# @require_http_methods(["DELETE", "POST", "OPTIONS"])
+# def unsave_article(request):
+#     """
+#     Remove a saved article for a user
+#     Expects JSON: {"article_id": "uuid"}
+#     Requires Bearer token in Authorization header
+#     """
+#     if request.method == "OPTIONS":
+#         return JsonResponse({}, status=200)
+#
+#     try:
+#         # Verify user token
+#         auth_header = request.headers.get("Authorization") or request.META.get("HTTP_AUTHORIZATION")
+#         if not auth_header or not auth_header.startswith("Bearer "):
+#             return JsonResponse({"success": False, "message": "Authorization token required"}, status=401)
+#
+#         token = auth_header.split(" ", 1)[1].strip()
+#         payload = verify_simple_token(token)
+#         if not payload or not payload.get("user_id"):
+#             return JsonResponse({"success": False, "message": "Invalid or expired token"}, status=401)
+#
+#         try:
+#             user = Users.objects.get(id=payload["user_id"])
+#         except Users.DoesNotExist:
+#             return JsonResponse({"success": False, "message": "User not found"}, status=404)
+#
+#         # Get article_id from request body
+#         try:
+#             data = json.loads(request.body)
+#         except json.JSONDecodeError:
+#             return JsonResponse({"success": False, "message": "Invalid JSON body"}, status=400)
+#
+#         article_id = data.get('article_id')
+#         if not article_id:
+#             return JsonResponse({"success": False, "message": "article_id required"}, status=400)
+#
+#         try:
+#             article = Articles.objects.get(id=article_id)
+#         except Articles.DoesNotExist:
+#             return JsonResponse({"success": False, "message": "Article not found"}, status=404)
+#
+#         # Delete the save
+#         deleted_count, _ = User_Saves.objects.filter(user=user, article=article).delete()
+#
+#         if deleted_count == 0:
+#             return JsonResponse({"success": False, "message": "Article was not saved"}, status=400)
+#
+#         return JsonResponse({
+#             "success": True,
+#             "message": "Article unsaved successfully",
+#             "data": {
+#                 "article_id": str(article.id),
+#                 "article_title": article.title
+#             }
+#         }, status=200)
+#
+#     except Exception as e:
+#         print("unsave_article exception:", str(e))
+#         return JsonResponse({"success": False, "message": f"Failed to unsave article: {str(e)}"}, status=500)
+
+
+# @require_http_methods(["GET"])
+# def get_saved_articles(request):
+#     """
+#     Get all saved articles for a user
+#     Requires Bearer token in Authorization header
+#     """
+#     try:
+#         # Verify user token
+#         auth_header = request.headers.get("Authorization") or request.META.get("HTTP_AUTHORIZATION")
+#         if not auth_header or not auth_header.startswith("Bearer "):
+#             return JsonResponse({"success": False, "message": "Authorization token required"}, status=401)
+#
+#         token = auth_header.split(" ", 1)[1].strip()
+#         payload = verify_simple_token(token)
+#         if not payload or not payload.get("user_id"):
+#             return JsonResponse({"success": False, "message": "Invalid or expired token"}, status=401)
+#
+#         try:
+#             user = Users.objects.get(id=payload["user_id"])
+#         except Users.DoesNotExist:
+#             return JsonResponse({"success": False, "message": "User not found"}, status=404)
+#
+#         # Get saved articles with article details
+#         saved_articles = User_Saves.objects.filter(user=user).select_related('article', 'article__author').order_by('-created_at')
+#
+#         saved_articles_data = []
+#         for save in saved_articles:
+#             article = save.article
+#             try:
+#                 content = json.loads(article.content) if article.content else []
+#             except Exception:
+#                 content = article.content or ""
+#
+#             saved_articles_data.append({
+#                 "save_id": str(save.id),
+#                 "saved_at": save.created_at.isoformat() if save.created_at else None,
+#                 "article": {
+#                     "id": str(article.id),
+#                     "title": article.title,
+#                     "content": content,
+#                     "author": {
+#                         "id": str(article.author.id),
+#                         "username": getattr(article.author, "username", ""),
+#                         "email": getattr(article.author, "email", "")
+#                     },
+#                     "media": article.media or [],
+#                     "category": article.category or "",
+#                     "published": bool(article.published),
+#                     "status": article.status or "",
+#                     "created_at": article.created_at.isoformat() if article.created_at else None,
+#                     "updated_at": article.updated_at.isoformat() if article.updated_at else None
+#                 }
+#             })
+#
+#         return JsonResponse({
+#             "success": True,
+#             "data": {
+#                 "saved_articles": saved_articles_data,
+#                 "total_saved": len(saved_articles_data)
+#             }
+#         }, status=200)
+#
+#     except Exception as e:
+#         print("get_saved_articles exception:", str(e))
+#         return JsonResponse({"success": False, "message": f"Failed to get saved articles: {str(e)}"}, status=500)
+
+
+# @require_http_methods(["GET"])
+# def check_article_saved(request):
+#     """
+#     Check if a specific article is saved by the user
+#     Query param: article_id
+#     Requires Bearer token in Authorization header
+#     """
+#     try:
+#         # Verify user token
+#         auth_header = request.headers.get("Authorization") or request.META.get("HTTP_AUTHORIZATION")
+#         if not auth_header or not auth_header.startswith("Bearer "):
+#             return JsonResponse({"success": False, "message": "Authorization token required"}, status=401)
+#
+#         token = auth_header.split(" ", 1)[1].strip()
+#         payload = verify_simple_token(token)
+#         if not payload or not payload.get("user_id"):
+#             return JsonResponse({"success": False, "message": "Invalid or expired token"}, status=401)
+#
+#         try:
+#             user = Users.objects.get(id=payload["user_id"])
+#         except Users.DoesNotExist:
+#             return JsonResponse({"success": False, "message": "User not found"}, status=404)
+#
+#         article_id = request.GET.get("article_id")
+#         if not article_id:
+#             return JsonResponse({"success": False, "message": "article_id required"}, status=400)
+#
+#         try:
+#             article = Articles.objects.get(id=article_id)
+#         except Articles.DoesNotExist:
+#             return JsonResponse({"success": False, "message": "Article not found"}, status=404)
+#
+#         Check if saved
+#         is_saved = User_Saves.objects.filter(user=user, article=article).exists()
+#
+#         return JsonResponse({
+#             "success": True,
+#             "data": {
+#                 "article_id": str(article.id),
+#                 "is_saved": is_saved
+#             }
+#         }, status=200)
+#
+#     except Exception as e:
+#         print("check_article_saved exception:", str(e))
+#         return JsonResponse({"success": False, "message": f"Failed to check checksaved status: {str(e)}"}, status=500)

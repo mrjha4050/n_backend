@@ -46,3 +46,4 @@ class Users(BaseModel):
         Check if the provided raw password matches the hashed password
         """
         return check_password(raw_password, self.password)
+
