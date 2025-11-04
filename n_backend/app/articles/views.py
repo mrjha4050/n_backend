@@ -6,12 +6,14 @@ from django.views.decorators.http import require_http_methods
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.db.models import Q
+from django.utils import timezone
 
 from .models import Articles, ArticleInteraction
 from n_backend.app.users.models import Users
 
 # Adjust these imports to match where you keep them
 from n_backend.app.users.views import verify_simple_token
+from n_backend.app.utils import require_admin
 
 try:
     from n_backend.app.cloudinary import upload_image, upload_image_from_url, delete_image
@@ -979,3 +981,231 @@ def get_articles_by_author(request):
         return JsonResponse({"success": True, "data": {"articles": data, "total": len(data)}}, status=200)
     except Exception as e:
         return JsonResponse({"success": False, "message": f"Failed to fetch articles: {str(e)}"}, status=500)
+
+
+# ==================== ADMIN ENDPOINTS ====================
+
+def article_to_dict_for_admin(article: Articles):
+    """
+    Convert Articles instance to JSON-serializable dict for admin dashboard.
+    Includes summary and author name for admin panel display.
+    """
+    try:
+        content = json.loads(article.content) if article.content else []
+        # Extract summary from first paragraph if available
+        summary = ""
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "paragraph":
+                    summary = block.get("value", "")[:200]  # First 200 chars
+                    break
+    except Exception:
+        content = article.content or ""
+        summary = str(content)[:200] if content else ""
+
+    author_name = ""
+    if article.author:
+        author_name = getattr(article.author, "username", "")
+
+    return {
+        "id": str(article.id),
+        "title": article.title,
+        "summary": summary,
+        "authorName": author_name,
+        "createdAt": article.created_at.isoformat() if article.created_at else None,
+        "status": article.status or "",
+        "published": bool(article.published),
+        "category": article.category or "",
+    }
+
+
+@csrf_exempt
+@require_admin
+@require_http_methods(["GET", "OPTIONS"])
+def get_pending_articles(request):
+    """
+    Get all pending articles (draft status or unpublished)
+    Admin endpoint - requires admin authentication
+    """
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
+
+    try:
+        # Get articles with status='draft' OR published=False
+        pending_articles = Articles.objects.filter(
+            Q(status='draft') | Q(published=False)
+        ).exclude(status='deleted').order_by("-created_at")
+
+        articles_data = [article_to_dict_for_admin(article) for article in pending_articles]
+
+        return JsonResponse({
+            "success": True,
+            "data": {
+                "articles": articles_data,
+                "total": len(articles_data)
+            }
+        }, status=200)
+
+    except Exception as e:
+        print("get_pending_articles exception:", str(e))
+        return JsonResponse({"success": False, "message": f"Failed to fetch pending articles: {str(e)}"}, status=500)
+
+
+@csrf_exempt
+@require_admin
+@require_http_methods(["POST", "PUT", "OPTIONS"])
+def approve_article(request):
+    """
+    Approve article(s) - sets status to 'published' and published=True
+    Supports both single and bulk approval
+    Admin endpoint - requires admin authentication
+    Expects JSON: {"article_id": "uuid"} or {"article_ids": ["uuid1", "uuid2", ...]}
+    """
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
+
+    try:
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"success": False, "message": "Invalid JSON body"}, status=400)
+
+        # Support both single and bulk approval
+        article_id = data.get('article_id')
+        article_ids = data.get('article_ids', [])
+
+        # If single article_id provided, convert to list
+        if article_id and not article_ids:
+            article_ids = [article_id]
+        elif article_id and article_ids:
+            # Both provided, combine them
+            article_ids = list(set(article_ids + [article_id]))
+
+        if not article_ids:
+            return JsonResponse({"success": False, "message": "article_id or article_ids required"}, status=400)
+
+        approved_articles = []
+        failed_articles = []
+
+        for art_id in article_ids:
+            try:
+                article = Articles.objects.get(id=art_id)
+                article.status = 'published'
+                article.published = True
+                article.updated_at = timezone.now()
+                article.save()
+                approved_articles.append(str(article.id))
+            except Articles.DoesNotExist:
+                failed_articles.append(str(art_id))
+            except Exception as e:
+                print(f"Failed to approve article {art_id}: {str(e)}")
+                failed_articles.append(str(art_id))
+
+        if failed_articles:
+            return JsonResponse({
+                "success": False,
+                "message": f"Some articles could not be approved",
+                "data": {
+                    "approved": approved_articles,
+                    "failed": failed_articles
+                }
+            }, status=207)  # Multi-status
+
+        return JsonResponse({
+            "success": True,
+            "message": f"Successfully approved {len(approved_articles)} article(s)",
+            "data": {
+                "approved_article_ids": approved_articles,
+                "count": len(approved_articles)
+            }
+        }, status=200)
+
+    except Exception as e:
+        print("approve_article exception:", str(e))
+        return JsonResponse({"success": False, "message": f"Failed to approve article(s): {str(e)}"}, status=500)
+
+
+@csrf_exempt
+@require_admin
+@require_http_methods(["POST", "PUT", "OPTIONS"])
+def reject_article(request):
+    """
+    Reject article - sets status to 'deleted' (or keeps as 'draft' with a note)
+    Admin endpoint - requires admin authentication
+    Expects JSON: {"article_id": "uuid"}
+    """
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
+
+    try:
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"success": False, "message": "Invalid JSON body"}, status=400)
+
+        article_id = data.get('article_id')
+        if not article_id:
+            return JsonResponse({"success": False, "message": "article_id required"}, status=400)
+
+        try:
+            article = Articles.objects.get(id=article_id)
+            # Set status to deleted for rejected articles
+            article.status = 'deleted'
+            article.published = False
+            article.updated_at = timezone.now()
+            article.save()
+
+            return JsonResponse({
+                "success": True,
+                "message": "Article rejected successfully",
+                "data": {
+                    "article_id": str(article.id),
+                    "status": article.status
+                }
+            }, status=200)
+
+        except Articles.DoesNotExist:
+            return JsonResponse({"success": False, "message": "Article not found"}, status=404)
+
+    except Exception as e:
+        print("reject_article exception:", str(e))
+        return JsonResponse({"success": False, "message": f"Failed to reject article: {str(e)}"}, status=500)
+
+
+@csrf_exempt
+@require_admin
+@require_http_methods(["DELETE", "POST", "OPTIONS"])
+def delete_article_admin(request):
+    """
+    Delete article (admin version with authorization check)
+    Admin endpoint - requires admin authentication
+    Expects article_id in query param or JSON body
+    """
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
+
+    try:
+        # Get article_id from query param or JSON body
+        article_id = request.GET.get("id") or request.GET.get("article_id")
+        if not article_id:
+            try:
+                body_text = request.body.decode("utf-8") if request.body else ""
+                data = json.loads(body_text) if body_text else {}
+                article_id = data.get("id") or data.get("article_id")
+            except Exception:
+                article_id = None
+
+        if not article_id:
+            return JsonResponse({"success": False, "message": "Article id required"}, status=400)
+
+        try:
+            article = Articles.objects.get(id=article_id)
+            article.delete()
+            return JsonResponse({"success": True, "message": "Article deleted successfully"}, status=200)
+
+        except Articles.DoesNotExist:
+            return JsonResponse({"success": False, "message": "Article not found"}, status=404)
+
+    except Exception as e:
+        print("delete_article_admin exception:", str(e))
+        return JsonResponse({"success": False, "message": f"Failed to delete article: {str(e)}"}, status=500)

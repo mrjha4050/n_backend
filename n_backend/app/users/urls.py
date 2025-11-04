@@ -10,6 +10,8 @@ urlpatterns = [
     path('profile/upload-pdf/', views.upload_pdf, name='upload_pdf'),
     path('change-password/', views.change_password, name='change_password'),
     path('delete-account/', views.delete_account, name='delete_account'),
-    path('list/', views.list_users, name='list_users')
+    path('list/', views.list_users, name='list_users'),
+    # Admin endpoints
+    path('admin/counts/', views.get_user_counts, name='get_user_counts'),
 ]
     

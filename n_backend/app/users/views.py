@@ -11,6 +11,7 @@ import base64
 
 from n_backend.app.articles.models import Articles
 from ..cloudinary import upload_image
+from n_backend.app.utils import require_admin
 
 def generate_simple_token(user):
     """Generate simple token for user"""
@@ -556,6 +557,37 @@ def list_users(request):
             'success': False,
             'message': f'Failed to list users: {str(e)}'
         }, status=500)
+
+
+@csrf_exempt
+@require_admin
+@require_http_methods(["GET", "OPTIONS"])
+def get_user_counts(request):
+    """
+    Get counts of readers and journalists
+    Admin endpoint - requires admin authentication
+    """
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
+
+    try:
+        readers_count = Users.objects.filter(role='reader').count()
+        journalists_count = Users.objects.filter(role='journalist').count()
+
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'readersCount': readers_count,
+                'journalistsCount': journalists_count
+            }
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Failed to get user counts: {str(e)}'
+        }, status=500)
+
 
 @csrf_exempt
 @require_http_methods(["POST"])

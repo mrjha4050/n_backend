@@ -16,7 +16,7 @@ class Users(BaseModel):
     username = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
-    role = models.CharField(max_length=255, choices=[('reader', 'Reader'), ('journalist', 'Journalist'), ('user', 'User')])
+    role = models.CharField(max_length=255, choices=[('reader', 'Reader'), ('journalist', 'Journalist'), ('user', 'User'), ('admin', 'Admin')])
     profileUrl = models.CharField(max_length=255, blank=True, default='', null=True)
     pdfUrl = models.CharField(max_length=255, blank=True, default='', null=True)
     pdfPublicId = models.CharField(max_length=255, blank=True, default='', null=True, help_text='Cloudinary public_id for PDF file')

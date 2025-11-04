@@ -19,6 +19,12 @@ urlpatterns =[
     path('user-interaction/', views.get_user_interaction, name='user_interaction'),
     path('comments-likes/', views.article_comments_likes, name='article_comments_likes'),
 
-# Cloudinary image upload endpoint
+    # Cloudinary image upload endpoint
     path('upload-image/', views.upload_article_image, name='upload_article_image'),
+
+    # Admin endpoints
+    path('admin/pending/', views.get_pending_articles, name='get_pending_articles'),
+    path('admin/approve/', views.approve_article, name='approve_article'),
+    path('admin/reject/', views.reject_article, name='reject_article'),
+    path('admin/delete/', views.delete_article_admin, name='delete_article_admin'),
 ]
