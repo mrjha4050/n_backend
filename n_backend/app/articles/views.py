@@ -976,11 +976,68 @@ def get_articles_by_author(request):
         author_id = request.GET.get("author")
         if not author_id:
             return JsonResponse({"success": False, "message": "Author id required"}, status=400)
+        
+        # Validate that author exists
+        try:
+            author = Users.objects.get(id=author_id)
+        except Users.DoesNotExist:
+            return JsonResponse({"success": False, "message": "Author not found"}, status=404)
+        
+        # Filter articles by author
         qs = Articles.objects.filter(author=author_id).order_by("-created_at")
         data = [article_to_dict(a) for a in qs]
         return JsonResponse({"success": True, "data": {"articles": data, "total": len(data)}}, status=200)
     except Exception as e:
+        print(f"get_articles_by_author exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return JsonResponse({"success": False, "message": f"Failed to fetch articles: {str(e)}"}, status=500)
+
+
+@require_http_methods(["GET"])
+def get_saved_articles(request):
+    """
+    Get all saved articles for a user
+    Query params: user_id (required)
+    """
+    try:
+        user_id = request.GET.get("user_id")
+        if not user_id:
+            return JsonResponse({"success": False, "message": "user_id required"}, status=400)
+        
+        try:
+            user = Users.objects.get(id=user_id)
+        except Users.DoesNotExist:
+            return JsonResponse({"success": False, "message": "User not found"}, status=404)
+        
+        # Get all interactions where saved=True for this user
+        saved_interactions = ArticleInteraction.objects.filter(
+            user=user,
+            saved=True
+        ).select_related('article', 'article__author').order_by("-created_at")
+        
+        saved_articles_data = []
+        for interaction in saved_interactions:
+            article = interaction.article
+            saved_articles_data.append({
+                "article": article_to_dict(article),
+                "saved_at": interaction.created_at.isoformat() if interaction.created_at else None,
+                "saved_interaction_id": str(interaction.id)
+            })
+        
+        return JsonResponse({
+            "success": True,
+            "data": {
+                "saved_articles": saved_articles_data,
+                "total": len(saved_articles_data)
+            }
+        }, status=200)
+        
+    except Exception as e:
+        print(f"get_saved_articles exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"success": False, "message": f"Failed to fetch saved articles: {str(e)}"}, status=500)
 
 
 # ==================== ADMIN ENDPOINTS ====================
@@ -1049,6 +1106,39 @@ def get_pending_articles(request):
     except Exception as e:
         print("get_pending_articles exception:", str(e))
         return JsonResponse({"success": False, "message": f"Failed to fetch pending articles: {str(e)}"}, status=500)
+
+
+@csrf_exempt
+@require_admin
+@require_http_methods(["GET", "OPTIONS"])
+def get_approved_articles(request):
+    """
+    Get all approved/published articles
+    Admin endpoint - requires admin authentication
+    """
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
+
+    try:
+        # Get articles with status='published' AND published=True
+        approved_articles = Articles.objects.filter(
+            status='published',
+            published=True
+        ).exclude(status='deleted').order_by("-created_at")
+
+        articles_data = [article_to_dict_for_admin(article) for article in approved_articles]
+
+        return JsonResponse({
+            "success": True,
+            "data": {
+                "articles": articles_data,
+                "total": len(articles_data)
+            }
+        }, status=200)
+
+    except Exception as e:
+        print("get_approved_articles exception:", str(e))
+        return JsonResponse({"success": False, "message": f"Failed to fetch approved articles: {str(e)}"}, status=500)
 
 
 @csrf_exempt

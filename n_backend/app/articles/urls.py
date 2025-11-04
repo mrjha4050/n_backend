@@ -16,6 +16,7 @@ urlpatterns =[
     path('add-comment/', views.add_comment, name='add_comment'),
     path('get-comments/', views.get_comments, name='get_comments'),
     path('toggle-save-article/', views.toggle_save_article, name='toggle_save_article'),
+    path('get-saved-articles/', views.get_saved_articles, name='get_saved_articles'),
     path('user-interaction/', views.get_user_interaction, name='user_interaction'),
     path('comments-likes/', views.article_comments_likes, name='article_comments_likes'),
 
@@ -24,6 +25,7 @@ urlpatterns =[
 
     # Admin endpoints
     path('admin/pending/', views.get_pending_articles, name='get_pending_articles'),
+    path('admin/approved/', views.get_approved_articles, name='get_approved_articles'),
     path('admin/approve/', views.approve_article, name='approve_article'),
     path('admin/reject/', views.reject_article, name='reject_article'),
     path('admin/delete/', views.delete_article_admin, name='delete_article_admin'),
