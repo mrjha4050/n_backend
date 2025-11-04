@@ -3,16 +3,31 @@ version: "3.9"
 services:
   web:
     build:
-      context: /Users/naman/Desktop/n_backend
+      context: .
       dockerfile: DockerFile
     ports:
       - "8000:8000"
     environment:
-      # Set any Django env vars here
+      # Django settings
       - DJANGO_SETTINGS_MODULE=n_backend.settings
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
-    # Uncomment to live-reload code changes during development
-    # volumes:
-    #   - .:/app
+      # Cloudinary configuration (set these in .env file or here)
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}
+    volumes:
+      # Mount database for persistence
+      - ./db.sqlite3:/app/db.sqlite3
+      # Mount static files (optional, for development)
+      # - ./static:/app/static
+      # Mount media files (optional, for development)
+      # - ./media:/app/media
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/admin/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 

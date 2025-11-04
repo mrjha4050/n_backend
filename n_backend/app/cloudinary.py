@@ -1,94 +1,116 @@
-import os
-from typing import Any, Dict, Optional
-
+# n_backend/app/cloudinary.py
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
-from cloudinary.utils import cloudinary_url
+from django.conf import settings
 
-
-_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
-_API_KEY = os.getenv("CLOUDINARY_API_KEY")
-_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
-_SECURE = os.getenv("CLOUDINARY_SECURE", "1")
-
-if not (_CLOUD_NAME and _API_KEY and _API_SECRET):
-    raise RuntimeError(
-        "Cloudinary environment variables missing. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET."
-    )
-
+# Configure Cloudinary
 cloudinary.config(
-    cloud_name=_CLOUD_NAME,
-    api_key=_API_KEY,
-    api_secret=_API_SECRET,
-    secure=_SECURE not in {"0", "false", "False"},
+    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+    api_key=settings.CLOUDINARY_API_KEY,
+    api_secret=settings.CLOUDINARY_API_SECRET,
+    secure=True
 )
 
-def upload_image(
-    file: Any,
-    *,
-    folder: Optional[str] = None,
-    public_id: Optional[str] = None,
-    overwrite: bool = False,
-    resource_type: str = "image",
-    **options: Any,
-) -> Dict[str, Any]:
-    """Upload a file to Cloudinary and return the upload response.
 
-    file can be a file path, file-like object, bytes, or remote URL.
+def upload_image(file_obj, folder=None, resource_type='image', overwrite=False):
     """
-    params: Dict[str, Any] = {"overwrite": overwrite, "resource_type": resource_type}
-    if folder:
-        params["folder"] = folder
-    if public_id:
-        params["public_id"] = public_id
-    params.update(options)
-    return cloudinary.uploader.upload(file, **params)
+    Upload an image to Cloudinary
+
+    Args:
+        file_obj: The file object to upload
+        folder: The folder path in Cloudinary (optional)
+        resource_type: Type of resource ('image', 'video', etc.)
+        overwrite: Whether to overwrite existing files
+
+    Returns:
+        dict: Cloudinary upload response
+    """
+    try:
+        upload_options = {
+            'resource_type': resource_type,
+            'overwrite': overwrite,
+        }
+
+        if folder:
+            upload_options['folder'] = folder
+
+        result = cloudinary.uploader.upload(file_obj, **upload_options)
+        return result
+
+    except Exception as e:
+        print(f"Cloudinary upload error: {str(e)}")
+        raise e
 
 
-def delete_asset(public_id: str, *, resource_type: str = "image", invalidate: bool = False) -> Dict[str, Any]:
-    """Delete an asset by public_id."""
-    return cloudinary.uploader.destroy(public_id, resource_type=resource_type, invalidate=invalidate)
+def upload_image_from_url(image_url, folder=None, resource_type='image'):
+    """
+    Upload an image from URL to Cloudinary
+
+    Args:
+        image_url: URL of the image to upload
+        folder: The folder path in Cloudinary (optional)
+        resource_type: Type of resource
+
+    Returns:
+        dict: Cloudinary upload response
+    """
+    try:
+        upload_options = {
+            'resource_type': resource_type,
+        }
+
+        if folder:
+            upload_options['folder'] = folder
+
+        result = cloudinary.uploader.upload(image_url, **upload_options)
+        return result
+
+    except Exception as e:
+        print(f"Cloudinary upload from URL error: {str(e)}")
+        raise e
 
 
-def build_url(
-    public_id: str,
-    *,
-    width: Optional[int] = None,
-    height: Optional[int] = None,
-    crop: Optional[str] = "fill",
-    fmt: Optional[str] = None,
-    secure: bool = True,
-    resource_type: str = "image",
-    type: str = "upload",
-    **options: Any,
-) -> str:
-    """Generate a transformed delivery URL for a Cloudinary asset."""
-    transformation: Dict[str, Any] = {}
-    if width is not None:
-        transformation["width"] = width
-    if height is not None:
-        transformation["height"] = height
-    if crop is not None:
-        transformation["crop"] = crop
-    if fmt is not None:
-        options["format"] = fmt
+def delete_image(public_id, resource_type='image'):
+    """
+    Delete an image from Cloudinary
 
-    url, _ = cloudinary_url(
-        public_id,
-        secure=secure,
-        resource_type=resource_type,
-        type=type,
-        transformation=transformation if transformation else None,
-        **options,
-    )
-    return url
+    Args:
+        public_id: The public ID of the image
+        resource_type: Type of resource
+
+    Returns:
+        dict: Cloudinary delete response
+    """
+    try:
+        result = cloudinary.uploader.destroy(public_id, resource_type=resource_type)
+        return result
+    except Exception as e:
+        print(f"Cloudinary delete error: {str(e)}")
+        raise e
 
 
-__all__ = [
-    "upload_image",
-    "delete_asset",
-    "build_url",
-]
+def get_image_url(public_id, transformation=None, format=None):
+    """
+    Generate Cloudinary URL for an image
 
+    Args:
+        public_id: The public ID of the image
+        transformation: Cloudinary transformation options (optional)
+        format: Image format (optional)
 
+    Returns:
+        str: Image URL
+    """
+    try:
+        url_options = {}
+        if transformation:
+            url_options['transformation'] = transformation
+        if format:
+            url_options['format'] = format
+
+        url = cloudinary.CloudinaryImage(public_id).build_url(**url_options)
+        return url
+    except Exception as e:
+        print(f"Cloudinary URL generation error: {str(e)}")
+        raise e

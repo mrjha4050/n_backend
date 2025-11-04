@@ -1,4 +1,4 @@
-from djongo import models
+from django.db import models
 import uuid
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ValidationError
@@ -16,8 +16,10 @@ class Users(BaseModel):
     username = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
-    role = models.CharField(max_length=255, choices=[('reader', 'Reader'), ('journalist', 'Journalist'), ('user', 'User')])
-    # profileUrl = models.CharField(max_length=255, blank=True, default='')
+    role = models.CharField(max_length=255, choices=[('reader', 'Reader'), ('journalist', 'Journalist'), ('user', 'User'), ('admin', 'Admin')])
+    profileUrl = models.CharField(max_length=255, blank=True, default='', null=True)
+    pdfUrl = models.CharField(max_length=255, blank=True, default='', null=True)
+    pdfPublicId = models.CharField(max_length=255, blank=True, default='', null=True, help_text='Cloudinary public_id for PDF file')
 
     class Meta:
         db_table = 'users'
@@ -44,3 +46,4 @@ class Users(BaseModel):
         Check if the provided raw password matches the hashed password
         """
         return check_password(raw_password, self.password)
+
