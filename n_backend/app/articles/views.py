@@ -672,19 +672,68 @@ def get_articles(request):
 
 @csrf_exempt
 @require_http_methods(["PUT", "POST"])
+@csrf_exempt
+@require_http_methods(["PUT", "POST", "OPTIONS"])
 def update_article(request):
     """
-    Accepts JSON body with:
-      - id (required), fields to update: title, content (array or JSON string), category, media, published, status
+    Enhanced article editing functionality
+    Supports both JSON and multipart/form-data
+    Handles image uploads and media management
     """
-    try:
-        try:
-            body_text = request.body.decode("utf-8") if request.body else ""
-            data = json.loads(body_text)
-        except Exception as e:
-            return JsonResponse({"success": False, "message": f"Invalid JSON body: {str(e)}"}, status=400)
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
 
-        article_id = data.get("id")
+    try:
+        # Authenticate user
+        auth_header = request.headers.get("Authorization") or request.META.get("HTTP_AUTHORIZATION")
+        user = None
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+            payload = verify_simple_token(token)
+            if payload and payload.get("user_id"):
+                try:
+                    user = Users.objects.get(id=payload["user_id"])
+                except Users.DoesNotExist:
+                    return JsonResponse({"success": False, "message": "Token user not found"}, status=401)
+
+        if not user:
+            return JsonResponse({"success": False, "message": "Authentication required"}, status=401)
+
+        content_type = (request.META.get("CONTENT_TYPE") or "").lower()
+
+        # Parse request data based on content type
+        if "multipart/form-data" in content_type:
+            article_id = request.POST.get("id")
+            title = (request.POST.get("title") or "").strip()
+            content_raw = request.POST.get("content") or ""
+            category = request.POST.get("category") or ""
+            published = request.POST.get("published")
+            status = request.POST.get("status") or "draft"
+            media_raw = request.POST.get("media")
+        else:
+            # JSON payload
+            try:
+                body_text = request.body.decode("utf-8") if request.body else ""
+                if not body_text:
+                    return JsonResponse({"success": False, "message": "Empty request body"}, status=400)
+                data = json.loads(body_text)
+            except Exception as e:
+                return JsonResponse({"success": False, "message": f"Invalid JSON body: {str(e)}"}, status=400)
+
+            article_id = data.get("id")
+            title = (data.get("title") or "").strip()
+            content_field = data.get("content", "")
+            category = data.get("category", "") or ""
+            published = data.get("published")
+            status = data.get("status") or "draft"
+            media_raw = data.get("media")
+
+            # Normalize content to JSON string
+            if isinstance(content_field, (list, dict)):
+                content_raw = json.dumps(content_field)
+            else:
+                content_raw = content_field or ""
+
         if not article_id:
             return JsonResponse({"success": False, "message": "Article id is required"}, status=400)
 
@@ -693,35 +742,167 @@ def update_article(request):
         except Articles.DoesNotExist:
             return JsonResponse({"success": False, "message": "Article not found"}, status=404)
 
-        # Update fields
-        if "title" in data:
-            article.title = data.get("title") or article.title
-        if "content" in data:
-            content_field = data.get("content")
-            if isinstance(content_field, (list, dict)):
-                article.content = json.dumps(content_field)
+        # Check if user is authorized to edit this article
+        if str(article.author.id) != str(user.id):
+            return JsonResponse({"success": False, "message": "You can only edit your own articles"}, status=403)
+
+        # Track uploaded files for cleanup in case of failure
+        uploaded_files = []
+        old_media = article.media or []
+        new_media = []
+
+        # Process content if provided
+        processed_content = None
+        if content_raw:
+            try:
+                content_list = json.loads(content_raw) if isinstance(content_raw, str) else content_raw
+                if not isinstance(content_list, list):
+                    return JsonResponse({"success": False, "message": "Content must be a JSON array of blocks"},
+                                        status=400)
+
+                # Process image blocks
+                processed_content = []
+                for idx, block in enumerate(content_list):
+                    if not isinstance(block, dict):
+                        processed_content.append(block)
+                        continue
+
+                    btype = block.get("type")
+                    if btype == "paragraph":
+                        processed_content.append({"type": "paragraph", "value": block.get("value", "")})
+                        continue
+
+                    if btype == "image":
+                        val = block.get("value", "")
+                        caption = block.get("caption", "")
+
+                        # Handle new image uploads
+                        if isinstance(val, str) and val.startswith("file_") and val in request.FILES:
+                            file_obj = request.FILES.get(val)
+                            try:
+                                folder_path = f"articles/{user.id}"
+                                upload_result = upload_image(
+                                    file_obj,
+                                    folder=folder_path,
+                                    resource_type="image",
+                                    overwrite=True
+                                )
+                                uploaded_url = upload_result.get("secure_url")
+                                if uploaded_url:
+                                    new_media.append(uploaded_url)
+                                    processed_content.append({
+                                        "type": "image",
+                                        "value": uploaded_url,
+                                        "caption": caption,
+                                        "public_id": upload_result.get("public_id")
+                                    })
+                                    uploaded_files.append(upload_result.get("public_id"))
+                                else:
+                                    processed_content.append({"type": "image", "value": "", "caption": caption})
+                            except Exception as ue:
+                                print("Cloudinary upload error:", ue)
+                                processed_content.append({"type": "image", "value": "", "caption": caption})
+                        else:
+                            # Existing image URL
+                            if val and val not in new_media:
+                                new_media.append(val)
+                            processed_content.append(block)
+                        continue
+
+                    # Preserve other block types
+                    processed_content.append(block)
+
+            except Exception as e:
+                return JsonResponse({"success": False, "message": f"Invalid content JSON: {str(e)}"}, status=400)
+
+        # Update media list
+        if media_raw is not None:
+            if isinstance(media_raw, list):
+                new_media.extend(media_raw)
             else:
-                article.content = content_field or article.content
-        if "media" in data:
-            article.media = data.get("media") or article.media
-        if "category" in data:
-            article.category = data.get("category") or article.category
-        if "published" in data:
-            article.published = bool(data.get("published"))
-        if "status" in data:
-            article.status = data.get("status") or article.status
+                try:
+                    media_list = json.loads(media_raw) if media_raw else []
+                    new_media.extend(media_list)
+                except Exception:
+                    # If media_raw is not JSON, use existing media
+                    new_media = list(set(new_media + old_media))
 
-        article.full_clean()
-        article.save()
-        return JsonResponse(
-            {"success": True, "message": "Article updated", "data": {"article": article_to_dict(article)}}, status=200)
+        # Remove duplicates from media
+        new_media = list(set(new_media))
 
-    except ValidationError as e:
-        return JsonResponse({"success": False, "message": str(e)}, status=400)
+        # Update article fields
+        update_fields = []
+        if title:
+            article.title = title
+            update_fields.append('title')
+
+        if processed_content is not None:
+            article.content = json.dumps(processed_content)
+            update_fields.append('content')
+
+        if category is not None:
+            article.category = category
+            update_fields.append('category')
+
+        if published is not None:
+            article.published = bool(published)
+            update_fields.append('published')
+
+        if status:
+            article.status = status
+            update_fields.append('status')
+
+        # Update media
+        article.media = new_media
+        update_fields.append('media')
+
+        article.updated_at = timezone.now()
+        update_fields.append('updated_at')
+
+        try:
+            article.full_clean()
+            article.save(update_fields=update_fields)
+
+            # Clean up old media that's no longer used
+            old_media_to_delete = set(old_media) - set(new_media)
+            for media_url in old_media_to_delete:
+                if 'cloudinary.com' in media_url:
+                    try:
+                        # Extract public ID from URL
+                        parts = media_url.split('/')
+                        if 'image/upload' in parts:
+                            upload_index = parts.index('image/upload')
+                            if len(parts) > upload_index + 1:
+                                public_id_with_format = parts[upload_index + 1]
+                                public_id = public_id_with_format.split('.')[0]
+                                delete_image(public_id)
+                    except Exception as e:
+                        print(f"Failed to delete old media {media_url}: {str(e)}")
+
+            return JsonResponse({
+                "success": True,
+                "message": "Article updated successfully",
+                "data": {"article": article_to_dict(article)}
+            }, status=200)
+
+        except ValidationError as e:
+            # Clean up uploaded files if validation fails
+            for public_id in uploaded_files:
+                try:
+                    delete_image(public_id)
+                except Exception:
+                    pass
+            return JsonResponse({"success": False, "message": str(e)}, status=400)
+
     except Exception as e:
+        # Clean up uploaded files if any error occurs
+        for public_id in uploaded_files:
+            try:
+                delete_image(public_id)
+            except Exception:
+                pass
         print("update_article exception:", str(e))
         return JsonResponse({"success": False, "message": f"Failed to update article: {str(e)}"}, status=500)
-
 
 @csrf_exempt
 @require_http_methods(["DELETE"])
